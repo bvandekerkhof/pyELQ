@@ -111,9 +111,37 @@ if __name__ == "__main__":
     source_map.location.north = np.array([20.0, 15.0])
 
     gas_object = CH4()
-    # dispersion_model = GaussianPlume(source_map=deepcopy(source_map))
+    print("Creating Dispersion Model")
+    temp_start_time = datetime.datetime.now()
+    dispersion_model_original = GaussianPlume(source_map=deepcopy(source_map))
+    temp_end_time = datetime.datetime.now()
+    print(f"Dispersion model created in {temp_end_time - temp_start_time}")
+    temp_start_time = datetime.datetime.now()
     dispersion_model = JaxGaussianPlume(source_map=deepcopy(source_map))
+    temp_end_time = datetime.datetime.now()
+    print(f"Jax dispersion model created in {temp_end_time - temp_start_time}")
     true_emission_rates = np.array([[15], [10]])
+    print("creating observations")
+    temp_start_time = datetime.datetime.now()
+    for current_sensor in sensor_group.values():
+        coupling_matrix = dispersion_model_original.compute_coupling(
+            sensor_object=current_sensor,
+            meteorology_object=met_object,
+            gas_object=gas_object,
+            output_stacked=False,
+            run_interpolation=False,
+        )
+        source_contribution = coupling_matrix @ true_emission_rates
+        observation = (
+            source_contribution.flatten()
+            + 2.0
+            + random_generator.normal(loc=0.0, scale=0.01, size=current_sensor.nof_observations)
+        )
+        current_sensor.concentration = observation
+    temp_end_time = datetime.datetime.now()
+    print(f"Observations created in {temp_end_time - temp_start_time}")
+
+    temp_start_time = datetime.datetime.now()
     for current_sensor in sensor_group.values():
         coupling_matrix = dispersion_model.compute_coupling(
             sensor_object=current_sensor,
@@ -129,4 +157,6 @@ if __name__ == "__main__":
             + random_generator.normal(loc=0.0, scale=0.01, size=current_sensor.nof_observations)
         )
         current_sensor.concentration = observation
+    temp_end_time = datetime.datetime.now()
+    print(f"Jax Observations created in {temp_end_time - temp_start_time}")
 
