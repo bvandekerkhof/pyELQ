@@ -2,7 +2,8 @@
 """Jax Example compute Gaussian coupling.
 
 Simple example testing the speed improvement from jaxifying the compute coupling function.
-When repeat is 1 we see that the code is slower as it needs to compile the function, but in the multiple repeats it is significantly faster as it is already compiled.
+When repeat is 1 we see that the code is slower as it needs to compile the function, 
+but in the multiple repeats it is significantly faster as it is already compiled.
 
 """
 import datetime
