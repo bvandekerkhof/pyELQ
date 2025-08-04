@@ -247,7 +247,7 @@ class GaussianPlume:
         sin_theta = jnp.sin(theta)
 
         distance_x = cos_theta * sensor_x + sin_theta * sensor_y
-        # TODO this part moved to the end of the function, but double check if we can avoid the calculation if True?, guess not
+        # TODO this part moved to the end of the function, but double check if we can avoid the calculation if True?
         # if jnp.all(distance_x < 0):
         #     return np.zeros_like(distance_x)
 

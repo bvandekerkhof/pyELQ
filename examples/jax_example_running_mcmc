@@ -16,7 +16,6 @@ from pyelq.jax.dispersion_model.gaussian_plume_new import GaussianPlume as JaxGa
 from pyelq.gas_species import CH4
 from pyelq.model import ELQModel
 from pyelq.meteorology import Meteorology
-from pyelq.plotting.plot import Plot
 from pyelq.preprocessing import Preprocessor
 from pyelq.sensor.beam import Beam
 from pyelq.sensor.sensor import Sensor, SensorGroup
@@ -287,7 +286,7 @@ if __name__ == "__main__":
 
     print("done")
 
-    # NOTE not really quicker now but also because we just jit compile a single method 
-    # which would probably be faster when compiled at a higher level. Now we need to 
-    # convert to jnp arrays every time. So good to just get the openMCMC code jit compiled 
+    # NOTE not really quicker now but also because we just jit compile a single method
+    # which would probably be faster when compiled at a higher level. Now we need to
+    # convert to jnp arrays every time. So good to just get the openMCMC code jit compiled
     # first and see how to go from there
