@@ -2,7 +2,7 @@
 """Jax Example compute Gaussian coupling.
 
 Simple example testing the speed improvement from jaxifying the compute coupling function.
-When repeat is 1 we see that the code is slower as it needs to compile the function, 
+When repeat is 1 we see that the code is slower as it needs to compile the function,
 but in the multiple repeats it is significantly faster as it is already compiled.
 
 """
@@ -11,11 +11,14 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
+
 from pyelq.coordinate_system import ENU, LLA
 from pyelq.dispersion_model.gaussian_plume import GaussianPlume
-from pyelq.jax.dispersion_model.gaussian_plume import GaussianPlume as JaxGaussianPlume
-from pyelq.jax.dispersion_model.gaussian_plume_new import GaussianPlume as JaxGaussianPlumeNew
 from pyelq.gas_species import CH4
+from pyelq.jax.dispersion_model.gaussian_plume import GaussianPlume as JaxGaussianPlume
+from pyelq.jax.dispersion_model.gaussian_plume_new import (
+    GaussianPlume as JaxGaussianPlumeNew,
+)
 from pyelq.meteorology import Meteorology
 from pyelq.sensor.beam import Beam
 from pyelq.sensor.sensor import Sensor, SensorGroup
@@ -25,7 +28,8 @@ if __name__ == "__main__":
     overall_results_array = []
     for frequency_seconds in [10, 30, 60, 120]:
         time_axis = pd.array(
-        pd.date_range(start="2024-01-01 08:00:00", end="2024-01-01 12:00:00", freq=f"{frequency_seconds}s"), dtype="datetime64[ns]"
+            pd.date_range(start="2024-01-01 08:00:00", end="2024-01-01 12:00:00", freq=f"{frequency_seconds}s"),
+            dtype="datetime64[ns]",
         )
         nof_observations = time_axis.size
         print(f"Numer of observation: {nof_observations}")
@@ -39,7 +43,9 @@ if __name__ == "__main__":
         sensor_y = radius * np.sin(angles * np.pi / 180)
         sensor_z = np.ones_like(sensor_x) * 5.0
 
-        ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
+        ENU_object = ENU(
+            ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude
+        )
         ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
         LLA_object = ENU_object.to_lla()
         LLA_array = LLA_object.to_array()
@@ -62,7 +68,9 @@ if __name__ == "__main__":
         sensor_x = np.array([5, 20])
         sensor_y = np.array([22, 5])
         sensor_z = np.ones_like(sensor_x) * 1.0
-        ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
+        ENU_object = ENU(
+            ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude
+        )
         ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
         LLA_object = ENU_object.to_lla()
         LLA_array = LLA_object.to_array()
@@ -109,7 +117,10 @@ if __name__ == "__main__":
             )
 
             source_map.generate_sources(
-                coordinate_object=location_object, sourcemap_limits=site_limits, sourcemap_type="hypercube", nof_sources=nof_sources
+                coordinate_object=location_object,
+                sourcemap_limits=site_limits,
+                sourcemap_type="hypercube",
+                nof_sources=nof_sources,
             )
 
             gas_object = CH4()
@@ -127,7 +138,6 @@ if __name__ == "__main__":
             temp_end_time = datetime.datetime.now()
             print(f"New Jax dispersion model (class registered pytree) created in {temp_end_time - temp_start_time}")
             print("creating coupling")
-
 
             for nof_repeats in [1, 10, 100]:
                 temp_start_time = datetime.datetime.now()
@@ -157,7 +167,9 @@ if __name__ == "__main__":
                 temp_end_time = datetime.datetime.now()
                 jax_time = temp_end_time - temp_start_time
                 print(f"Jax Observations created in {jax_time}")
-                overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds()))
+                overall_results_array.append(
+                    (nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds())
+                )
 
                 temp_start_time = datetime.datetime.now()
                 for _ in range(nof_repeats):
@@ -172,9 +184,21 @@ if __name__ == "__main__":
                 temp_end_time = datetime.datetime.now()
                 new_jax_time = temp_end_time - temp_start_time
                 print(f"New Jax Observations created in {new_jax_time}")
-                overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds(), new_jax_time.total_seconds()))
+                overall_results_array.append(
+                    (
+                        nof_observations,
+                        nof_sources,
+                        nof_repeats,
+                        normal_time.total_seconds(),
+                        jax_time.total_seconds(),
+                        new_jax_time.total_seconds(),
+                    )
+                )
 
-    overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]", "New Jax time [s]"])
+    overall_results_df = pd.DataFrame(
+        data=overall_results_array,
+        columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]", "New Jax time [s]"],
+    )
     print(overall_results_df)
 
     # NOTE This jit compilation does not work. I think because we jit compile with sourcemap for 2 sources, that is marked as a static argument. But it does not find a new updated version of sourcemap so does not compile again the second time for 5 sources creating the mismatch of shapes on which it errors out (2 vs 5)

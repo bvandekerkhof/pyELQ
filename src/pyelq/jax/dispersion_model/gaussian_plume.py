@@ -13,13 +13,13 @@ The Mathematics of Atmospheric Dispersion Modeling, John M. Stockie, DOI. 10.113
 
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, Union
 
-import numpy as np
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+import numpy as np
 from jax import jit
-from functools import partial
 
 import pyelq.support_functions.spatio_temporal_interpolation as sti
 from pyelq.coordinate_system import ENU, LLA
@@ -30,7 +30,6 @@ from pyelq.sensor.beam import Beam
 from pyelq.sensor.satellite import Satellite
 from pyelq.sensor.sensor import Sensor, SensorGroup
 from pyelq.source_map import SourceMap
-
 
 
 @dataclass
@@ -197,7 +196,6 @@ class GaussianPlume:
 
         return plume_coupling
 
-
     def compute_coupling_array(
         self,
         sensor_x: jnp.ndarray,
@@ -235,20 +233,20 @@ class GaussianPlume:
                 in [ppm] when multiplied by sources in [kg/hr].
 
         """
-        
-        return _compute_coupling_array_jax(sensor_x = sensor_x, 
-                                          sensor_y=sensor_y,
-                                          sensor_z=sensor_z,
-                                          source_z=source_z,
-                                          wind_speed=wind_speed,
-                                          theta=theta,
-                                          wind_turbulence_horizontal=wind_turbulence_horizontal,
-                                          wind_turbulence_vertical=wind_turbulence_vertical,
-                                          gas_density=gas_density,
-                                          source_half_width=self.source_half_width,
-                                          minimum_contribution=self.minimum_contribution)
 
-
+        return _compute_coupling_array_jax(
+            sensor_x=sensor_x,
+            sensor_y=sensor_y,
+            sensor_z=sensor_z,
+            source_z=source_z,
+            wind_speed=wind_speed,
+            theta=theta,
+            wind_turbulence_horizontal=wind_turbulence_horizontal,
+            wind_turbulence_vertical=wind_turbulence_vertical,
+            gas_density=gas_density,
+            source_half_width=self.source_half_width,
+            minimum_contribution=self.minimum_contribution,
+        )
 
     def calculate_gas_density(
         self, meteorology: Meteorology, sensor_object: Sensor, gas_object: Union[GasSpecies, None]
@@ -692,5 +690,6 @@ def _compute_coupling_array_jax(
     plume_coupling = jnp.where(jnp.logical_or(distance_x < 0, plume_coupling < minimum_contribution), 0, plume_coupling)
 
     return plume_coupling
+
 
 # TODO Probably need to just override the methods which have a jax implementation and just inherit from the base class otherwise

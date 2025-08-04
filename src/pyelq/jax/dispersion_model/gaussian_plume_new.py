@@ -13,13 +13,13 @@ The Mathematics of Atmospheric Dispersion Modeling, John M. Stockie, DOI. 10.113
 
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, Union
 
-import numpy as np
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+import numpy as np
 from jax import jit
-from functools import partial
 
 import pyelq.support_functions.spatio_temporal_interpolation as sti
 from pyelq.coordinate_system import ENU, LLA
@@ -33,9 +33,15 @@ from pyelq.source_map import SourceMap
 
 jax.config.update("jax_traceback_filtering", "off")
 
-@partial(jax.tree_util.register_dataclass,
-                   data_fields=['source_half_width', 'minimum_contribution',],
-                   meta_fields=['source_map'])
+
+@partial(
+    jax.tree_util.register_dataclass,
+    data_fields=[
+        "source_half_width",
+        "minimum_contribution",
+    ],
+    meta_fields=["source_map"],
+)
 @dataclass
 class GaussianPlume:
     """Defines the Gaussian plume dispersion model class.
@@ -200,7 +206,6 @@ class GaussianPlume:
 
         return plume_coupling
 
-
     @jit
     def compute_coupling_array(
         self,
@@ -265,11 +270,11 @@ class GaussianPlume:
         )
 
         plume_coupling = jnp.divide(jnp.multiply(plume_coupling, 1e6), (gas_density * 3600))
-        plume_coupling = jnp.where(jnp.logical_or(distance_x < 0, plume_coupling < self.minimum_contribution), 0, plume_coupling)
+        plume_coupling = jnp.where(
+            jnp.logical_or(distance_x < 0, plume_coupling < self.minimum_contribution), 0, plume_coupling
+        )
 
         return plume_coupling
-
-
 
     def calculate_gas_density(
         self, meteorology: Meteorology, sensor_object: Sensor, gas_object: Union[GasSpecies, None]
