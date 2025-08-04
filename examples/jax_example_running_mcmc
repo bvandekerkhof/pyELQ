@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+"""Jax Example running an MCMC.
+
+"""
 import datetime
 from copy import deepcopy
 
@@ -11,6 +15,7 @@ from pyelq.component.source_model import Normal
 from pyelq.coordinate_system import ENU, LLA
 from pyelq.dispersion_model.gaussian_plume import GaussianPlume
 from pyelq.jax.dispersion_model.gaussian_plume import GaussianPlume as JaxGaussianPlume
+from pyelq.jax.dispersion_model.gaussian_plume_new import GaussianPlume as JaxGaussianPlumeNew
 from pyelq.gas_species import CH4
 from pyelq.model import ELQModel
 from pyelq.meteorology import Meteorology
@@ -19,162 +24,276 @@ from pyelq.preprocessing import Preprocessor
 from pyelq.sensor.beam import Beam
 from pyelq.sensor.sensor import Sensor, SensorGroup
 from pyelq.source_map import SourceMap
+import jax
+
+jax.config.update("jax_traceback_filtering", "off")
 
 if __name__ == "__main__":
     overall_results_array = []
-    for frequency_seconds in [10, 30, 60, 120]:
-        time_axis = pd.array(
+    frequency_seconds = 10
+    time_axis = pd.array(
         pd.date_range(start="2024-01-01 08:00:00", end="2024-01-01 12:00:00", freq=f"{frequency_seconds}s"), dtype="datetime64[ns]"
         )
-        nof_observations = time_axis.size
-        print(f"Numer of observation: {nof_observations}")
-        reference_latitude = 0
-        reference_longitude = 0
-        reference_altitude = 0
+    nof_observations = time_axis.size
+    print(f"Numer of observation: {nof_observations}")
+    reference_latitude = 0
+    reference_longitude = 0
+    reference_altitude = 0
 
-        radius = 30
-        angles = np.linspace(0, 90, 5)
-        sensor_x = radius * np.cos(angles * np.pi / 180)
-        sensor_y = radius * np.sin(angles * np.pi / 180)
-        sensor_z = np.ones_like(sensor_x) * 5.0
+    radius = 30
+    angles = np.linspace(0, 90, 5)
+    sensor_x = radius * np.cos(angles * np.pi / 180)
+    sensor_y = radius * np.sin(angles * np.pi / 180)
+    sensor_z = np.ones_like(sensor_x) * 5.0
 
-        ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
-        ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
-        LLA_object = ENU_object.to_lla()
-        LLA_array = LLA_object.to_array()
+    ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
+    ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
+    LLA_object = ENU_object.to_lla()
+    LLA_array = LLA_object.to_array()
 
-        nof_sensors = LLA_array.shape[0]
-        sensor_group = SensorGroup()
-        for sensor in range(nof_sensors):
-            new_sensor = Beam()
-            new_sensor.label = f"Beam sensor {sensor}"
-            new_sensor.location = LLA(
-                latitude=np.array([reference_latitude, LLA_object.latitude[sensor]]),
-                longitude=np.array([reference_longitude, LLA_object.longitude[sensor]]),
-                altitude=np.array([5.0, LLA_object.altitude[sensor]]),
-            )
-
-            new_sensor.time = time_axis
-            new_sensor.concentration = np.zeros(nof_observations)
-            sensor_group.add_sensor(new_sensor)
-
-        sensor_x = np.array([5, 20])
-        sensor_y = np.array([22, 5])
-        sensor_z = np.ones_like(sensor_x) * 1.0
-        ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
-        ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
-        LLA_object = ENU_object.to_lla()
-        LLA_array = LLA_object.to_array()
-
-        nof_sensors = LLA_array.shape[0]
-        for sensor in range(nof_sensors):
-            new_sensor = Sensor()
-            new_sensor.label = f"Point sensor {sensor}"
-            new_sensor.location = LLA(
-                latitude=np.array([LLA_object.latitude[sensor]]),
-                longitude=np.array([LLA_object.longitude[sensor]]),
-                altitude=np.array([LLA_object.altitude[sensor]]),
-            )
-
-            new_sensor.time = time_axis
-            new_sensor.concentration = np.zeros(nof_observations)
-            sensor_group.add_sensor(new_sensor)
-
-        met_object = Meteorology()
-        random_generator = np.random.default_rng(0)
-
-        met_object.time = time_axis
-        met_object.wind_direction = np.linspace(0.0, 90.0, nof_observations) + random_generator.normal(
-            loc=0.0, scale=0.1, size=nof_observations
-        )
-        met_object.wind_speed = 4.0 * np.ones_like(met_object.wind_direction) + random_generator.normal(
-            loc=0.0, scale=0.1, size=nof_observations
+    nof_sensors = LLA_array.shape[0]
+    sensor_group = SensorGroup()
+    sensor_group_original = SensorGroup()
+    for sensor in range(nof_sensors):
+        new_sensor = Beam()
+        new_sensor.label = f"Beam sensor {sensor}"
+        new_sensor.location = LLA(
+            latitude=np.array([reference_latitude, LLA_object.latitude[sensor]]),
+            longitude=np.array([reference_longitude, LLA_object.longitude[sensor]]),
+            altitude=np.array([5.0, LLA_object.altitude[sensor]]),
         )
 
-        met_object.calculate_uv_from_wind_speed_direction()
+        new_sensor.time = time_axis
+        new_sensor.concentration = np.zeros(nof_observations)
+        sensor_group.add_sensor(new_sensor)
+        sensor_group_original.add_sensor(new_sensor)
 
-        met_object.temperature = (273.1 + 15.0) * np.ones_like(met_object.wind_direction)
-        met_object.pressure = 101.325 * np.ones_like(met_object.wind_direction)
+    sensor_x = np.array([5, 20])
+    sensor_y = np.array([22, 5])
+    sensor_z = np.ones_like(sensor_x) * 1.0
+    ENU_object = ENU(ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude)
+    ENU_object.from_array(np.vstack([sensor_x, sensor_y, sensor_z]).T)
+    LLA_object = ENU_object.to_lla()
+    LLA_array = LLA_object.to_array()
 
-        met_object.wind_turbulence_horizontal = 5.0 * np.ones_like(met_object.wind_direction)
-        met_object.wind_turbulence_vertical = 5.0 * np.ones_like(met_object.wind_direction)
+    nof_sensors = LLA_array.shape[0]
+    for sensor in range(nof_sensors):
+        new_sensor = Sensor()
+        new_sensor.label = f"Point sensor {sensor}"
+        new_sensor.location = LLA(
+            latitude=np.array([LLA_object.latitude[sensor]]),
+            longitude=np.array([LLA_object.longitude[sensor]]),
+            altitude=np.array([LLA_object.altitude[sensor]]),
+        )
 
-        for nof_sources in [2, 5, 10]:
-            print(f"Number of sources: {nof_sources}")
-            source_map = SourceMap()
-            site_limits = np.array([[0, 30], [0, 30], [0, 3]])
-            location_object = ENU(
-                ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude
-            )
+        new_sensor.time = time_axis
+        new_sensor.concentration = np.zeros(nof_observations)
+        sensor_group.add_sensor(new_sensor)
+        sensor_group_original.add_sensor(new_sensor)
 
-            source_map.generate_sources(
-                coordinate_object=location_object, sourcemap_limits=site_limits, sourcemap_type="hypercube", nof_sources=nof_sources
-            )
+    met_object = Meteorology()
+    random_generator = np.random.default_rng(0)
 
-            # source_map.location.up = np.array([2.0, 3.0])
-            # source_map.location.east = np.array([10.0, 20.0])
-            # source_map.location.north = np.array([20.0, 15.0])
+    met_object.time = time_axis
+    met_object.wind_direction = np.linspace(0.0, 90.0, nof_observations)
+    met_object.wind_speed = 4.0 * np.ones_like(met_object.wind_direction)
 
-            gas_object = CH4()
-            print("Creating Dispersion Model")
-            temp_start_time = datetime.datetime.now()
-            dispersion_model_original = GaussianPlume(source_map=deepcopy(source_map))
-            temp_end_time = datetime.datetime.now()
-            print(f"Dispersion model created in {temp_end_time - temp_start_time}")
-            temp_start_time = datetime.datetime.now()
-            dispersion_model = JaxGaussianPlume(source_map=deepcopy(source_map))
-            temp_end_time = datetime.datetime.now()
-            print(f"Jax dispersion model created in {temp_end_time - temp_start_time}")
-            true_emission_rates = np.array([[15], [10]])
-            print("creating observations")
+    met_object.calculate_uv_from_wind_speed_direction()
 
+    met_object.temperature = (273.1 + 15.0) * np.ones_like(met_object.wind_direction)
+    met_object.pressure = 101.325 * np.ones_like(met_object.wind_direction)
 
-            for nof_repeats in [1, 10, 100]:
-                temp_start_time = datetime.datetime.now()
-                for _ in range(nof_repeats):
-                    for current_sensor in sensor_group.values():
-                        coupling_matrix = dispersion_model_original.compute_coupling(
-                            sensor_object=current_sensor,
-                            meteorology_object=met_object,
-                            gas_object=gas_object,
-                            output_stacked=False,
-                            run_interpolation=False,
-                        )
-                        # source_contribution = coupling_matrix @ true_emission_rates
-                        # observation = (
-                        #     source_contribution.flatten()
-                        #     + 2.0
-                        #     + random_generator.normal(loc=0.0, scale=0.01, size=current_sensor.nof_observations)
-                        # )
-                        # current_sensor.concentration = observation
-                temp_end_time = datetime.datetime.now()
-                normal_time = temp_end_time - temp_start_time
-                print(f"Observations created in {normal_time}")
+    met_object.wind_turbulence_horizontal = 5.0 * np.ones_like(met_object.wind_direction)
+    met_object.wind_turbulence_vertical = 5.0 * np.ones_like(met_object.wind_direction)
 
-                temp_start_time = datetime.datetime.now()
-                for _ in range(nof_repeats):
-                    for current_sensor in sensor_group.values():
-                        coupling_matrix = dispersion_model.compute_coupling(
-                            sensor_object=current_sensor,
-                            meteorology_object=met_object,
-                            gas_object=gas_object,
-                            output_stacked=False,
-                            run_interpolation=False,
-                        )
-                        # source_contribution = coupling_matrix @ true_emission_rates
-                        # observation = (
-                        #     source_contribution.flatten()
-                        #     + 2.0
-                        #     + random_generator.normal(loc=0.0, scale=0.01, size=current_sensor.nof_observations)
-                        # )
-                        # current_sensor.concentration = observation
-                temp_end_time = datetime.datetime.now()
-                jax_time = temp_end_time - temp_start_time
-                print(f"Jax Observations created in {jax_time}")
-                overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds()))
+    nof_sources = 2
+    print(f"Number of sources: {nof_sources}")
+    source_map = SourceMap()
+    site_limits = np.array([[0, 30], [0, 30], [0, 3]])
+    location_object = ENU(
+        ref_latitude=reference_latitude, ref_longitude=reference_longitude, ref_altitude=reference_altitude
+    )
 
-    overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]"])
-    print(overall_results_df)
+    source_map.generate_sources(
+        coordinate_object=location_object, sourcemap_limits=site_limits, sourcemap_type="hypercube", nof_sources=nof_sources
+    )
+
+    source_map.location.up = np.array([2.0, 3.0])
+    source_map.location.east = np.array([10.0, 20.0])
+    source_map.location.north = np.array([20.0, 15.0])
+
+    gas_object = CH4()
+    dispersion_model_original = GaussianPlume(source_map=deepcopy(source_map))
+    dispersion_model = JaxGaussianPlume(source_map=deepcopy(source_map))
+    dispersion_model_new = JaxGaussianPlumeNew(source_map=deepcopy(source_map))
+    true_emission_rates = np.array([[15], [10]])
+
+    for current_sensor in sensor_group_original.values():
+        coupling_matrix = dispersion_model_original.compute_coupling(
+            sensor_object=current_sensor,
+            meteorology_object=met_object,
+            gas_object=gas_object,
+            output_stacked=False,
+            run_interpolation=False,
+        )
+        source_contribution = coupling_matrix @ true_emission_rates
+        observation = source_contribution.flatten()
+        current_sensor.concentration = observation
 
 
-# TODO create new example where we run MCMC and see how that performs, than check if we can jaxify more code for even more speed up?
+    for current_sensor in sensor_group.values():
+        coupling_matrix = dispersion_model.compute_coupling(
+            sensor_object=current_sensor,
+            meteorology_object=met_object,
+            gas_object=gas_object,
+            output_stacked=False,
+            run_interpolation=False,
+        )
+        source_contribution = coupling_matrix @ true_emission_rates
+        observation = source_contribution.flatten()
+        current_sensor.concentration = observation
+
+    for current_sensor in sensor_group.values():
+        coupling_matrix = dispersion_model_new.compute_coupling(
+            sensor_object=current_sensor,
+            meteorology_object=met_object,
+            gas_object=gas_object,
+            output_stacked=False,
+            run_interpolation=False,
+        )
+        source_contribution = coupling_matrix @ true_emission_rates
+        observation = source_contribution.flatten()
+        current_sensor.concentration = observation
+    
+    # NEW PART
+
+    analysis_time_range = [datetime.datetime(2024, 1, 1, 8, 0, 0), datetime.datetime(2024, 1, 1, 12, 0, 0)]
+
+    smoothing_period = 1 * 60
+
+    time_bin_edges = pd.array(
+        pd.date_range(analysis_time_range[0], analysis_time_range[1], freq=f"{smoothing_period}s"), dtype="datetime64[ns]"
+    )
+
+    prepocessor_object_original = Preprocessor(
+        time_bin_edges=time_bin_edges, sensor_object=sensor_group_original, met_object=met_object, aggregate_function="median"
+    )
+    prepocessor_object = Preprocessor(
+        time_bin_edges=time_bin_edges, sensor_object=sensor_group, met_object=met_object, aggregate_function="median"
+    )
+
+    min_wind_speed = 0.05
+    prepocessor_object_original.filter_on_met(filter_variable=["wind_speed"], lower_limit=[min_wind_speed], upper_limit=[np.inf])
+    prepocessor_object.filter_on_met(filter_variable=["wind_speed"], lower_limit=[min_wind_speed], upper_limit=[np.inf])
+
+    source_model = Normal()
+    source_model.emission_rate_mean = np.array([0], ndmin=1)
+    source_model.initial_precision = np.array([1 / (2.5**2)], ndmin=1)
+    source_model.reversible_jump = False
+    source_model.rate_num_sources = 1.0
+    source_model.dispersion_model = dispersion_model
+    source_model.update_precision = False
+    source_model.site_limits = site_limits
+    source_model.coverage_detection = 0.1  # ppm
+    source_model.coverage_test_source = 3.0  # kg/hr
+
+    source_model_new = Normal()
+    source_model_new.emission_rate_mean = np.array([0], ndmin=1)
+    source_model_new.initial_precision = np.array([1 / (2.5**2)], ndmin=1)
+    source_model_new.reversible_jump = False
+    source_model_new.rate_num_sources = 1.0
+    source_model_new.dispersion_model = dispersion_model_new
+    source_model_new.update_precision = False
+    source_model_new.site_limits = site_limits
+    source_model_new.coverage_detection = 0.1  # ppm
+    source_model_new.coverage_test_source = 3.0  # kg/hr
+
+    source_model_original = Normal()
+    source_model_original.emission_rate_mean = np.array([0], ndmin=1)
+    source_model_original.initial_precision = np.array([1 / (2.5**2)], ndmin=1)
+    source_model_original.reversible_jump = False
+    source_model_original.rate_num_sources = 1.0
+    source_model_original.dispersion_model = dispersion_model_original
+    source_model_original.update_precision = False
+    source_model_original.site_limits = site_limits
+    source_model_original.coverage_detection = 0.1  # ppm
+    source_model_original.coverage_test_source = 3.0  # kg/hr
+
+    # background = SpatioTemporalBackground()
+    # background.n_time = None
+    # background.mean_bg = 2.0
+    # background.spatial_dependence = True
+    # background.initial_precision = 1 / np.power(3e-4, 2)
+    # background.precision_time_0 = 1 / np.power(0.1, 2)
+    # background.spatial_correlation_param = 25.0
+    # background.update_precision = False
+
+    # offset_model = PerSensor()
+    # offset_model.update_precision = False
+    # offset_model.initial_precision = 1 / (0.001) ** 2
+
+    error_model = BySensor()
+    error_model.initial_precision = 1 / (0.1) ** 2
+    error_model.prior_precision_shape = 1e-2
+    error_model.prior_precision_rate = 1e-2
+
+    elq_model_original = ELQModel(
+        sensor_object=prepocessor_object_original.sensor_object,
+        meteorology=prepocessor_object_original.met_object,
+        gas_species=gas_object,
+        # background=background,
+        source_model=source_model_original,
+        error_model=error_model,
+        # offset_model=offset_model,
+    )
+    elq_model_original.n_iter = 1000
+
+    elq_model_original.initialise()
+
+    elq_model_original.to_mcmc()
+    elq_model_original.run_mcmc()
+    elq_model_original.from_mcmc()
+
+    elq_model = ELQModel(
+        sensor_object=prepocessor_object.sensor_object,
+        meteorology=prepocessor_object.met_object,
+        gas_species=gas_object,
+        # background=background,
+        source_model=source_model,
+        error_model=error_model,
+        # offset_model=offset_model,
+    )
+    elq_model.n_iter = 1000
+
+    elq_model.initialise()
+
+    elq_model.to_mcmc()
+    elq_model.run_mcmc()
+    elq_model.from_mcmc()
+
+    elq_model_new = ELQModel(
+        sensor_object=prepocessor_object.sensor_object,
+        meteorology=prepocessor_object.met_object,
+        gas_species=gas_object,
+        # background=background,
+        source_model=source_model_new,
+        error_model=error_model,
+        # offset_model=offset_model,
+    )
+    elq_model_new.n_iter = 1000
+
+    elq_model_new.initialise()
+
+    elq_model_new.to_mcmc()
+    elq_model_new.run_mcmc()
+    elq_model_new.from_mcmc()
+
+    print("done")
+
+    # overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds()))
+
+    # overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]"])
+    # print(overall_results_df)
+
+    # NOTE not really quicker now but also because we just jit compile a single method which would probably be faster when compiled at a higher level
+    # Now we need to convert to jnp arrays every time. So good to just get the openMCMC code jit compiled first and see how to go from there

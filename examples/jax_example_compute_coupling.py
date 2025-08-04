@@ -14,6 +14,7 @@ import pandas as pd
 from pyelq.coordinate_system import ENU, LLA
 from pyelq.dispersion_model.gaussian_plume import GaussianPlume
 from pyelq.jax.dispersion_model.gaussian_plume import GaussianPlume as JaxGaussianPlume
+from pyelq.jax.dispersion_model.gaussian_plume_new import GaussianPlume as JaxGaussianPlumeNew
 from pyelq.gas_species import CH4
 from pyelq.meteorology import Meteorology
 from pyelq.sensor.beam import Beam
@@ -121,8 +122,11 @@ if __name__ == "__main__":
             dispersion_model = JaxGaussianPlume(source_map=deepcopy(source_map))
             temp_end_time = datetime.datetime.now()
             print(f"Jax dispersion model created in {temp_end_time - temp_start_time}")
-            true_emission_rates = np.array([[15], [10]])
-            print("creating observations")
+            temp_start_time = datetime.datetime.now()
+            dispersion_model_new = JaxGaussianPlumeNew(source_map=deepcopy(source_map))
+            temp_end_time = datetime.datetime.now()
+            print(f"New Jax dispersion model (class registered pytree) created in {temp_end_time - temp_start_time}")
+            print("creating coupling")
 
 
             for nof_repeats in [1, 10, 100]:
@@ -155,5 +159,23 @@ if __name__ == "__main__":
                 print(f"Jax Observations created in {jax_time}")
                 overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds()))
 
-    overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]"])
+                temp_start_time = datetime.datetime.now()
+                for _ in range(nof_repeats):
+                    for current_sensor in sensor_group.values():
+                        coupling_matrix = dispersion_model_new.compute_coupling(
+                            sensor_object=current_sensor,
+                            meteorology_object=met_object,
+                            gas_object=gas_object,
+                            output_stacked=False,
+                            run_interpolation=False,
+                        )
+                temp_end_time = datetime.datetime.now()
+                new_jax_time = temp_end_time - temp_start_time
+                print(f"New Jax Observations created in {new_jax_time}")
+                overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds(), new_jax_time.total_seconds()))
+
+    overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]", "New Jax time [s]"])
     print(overall_results_df)
+
+    # NOTE This jit compilation does not work. I think because we jit compile with sourcemap for 2 sources, that is marked as a static argument. But it does not find a new updated version of sourcemap so does not compile again the second time for 5 sources creating the mismatch of shapes on which it errors out (2 vs 5)
+    # Assuming this issue will be resolved if we pytree register every dataclass we use (including sourcemap) to the lowest level as we do with the openMCMC example where this approach does work.
