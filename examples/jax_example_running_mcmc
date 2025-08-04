@@ -7,10 +7,7 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from pyelq.component.background import SpatioTemporalBackground
 from pyelq.component.error_model import BySensor
-from pyelq.component.offset import PerSensor
 from pyelq.component.source_model import Normal
 from pyelq.coordinate_system import ENU, LLA
 from pyelq.dispersion_model.gaussian_plume import GaussianPlume
@@ -290,10 +287,7 @@ if __name__ == "__main__":
 
     print("done")
 
-    # overall_results_array.append((nof_observations, nof_sources, nof_repeats, normal_time.total_seconds(), jax_time.total_seconds()))
-
-    # overall_results_df = pd.DataFrame(data=overall_results_array, columns=["# observations", "# sources", "# repeats", "Normal time [s]", "Jax time [s]"])
-    # print(overall_results_df)
-
-    # NOTE not really quicker now but also because we just jit compile a single method which would probably be faster when compiled at a higher level
-    # Now we need to convert to jnp arrays every time. So good to just get the openMCMC code jit compiled first and see how to go from there
+    # NOTE not really quicker now but also because we just jit compile a single method 
+    # which would probably be faster when compiled at a higher level. Now we need to 
+    # convert to jnp arrays every time. So good to just get the openMCMC code jit compiled 
+    # first and see how to go from there

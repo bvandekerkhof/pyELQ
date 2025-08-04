@@ -23,7 +23,6 @@ from jax import jit
 
 import pyelq.support_functions.spatio_temporal_interpolation as sti
 from pyelq.coordinate_system import ENU, LLA
-from pyelq.dispersion_model.gaussian_plume import GaussianPlume as GaussianPlumeOriginal
 from pyelq.gas_species import GasSpecies
 from pyelq.meteorology import Meteorology, MeteorologyGroup
 from pyelq.sensor.beam import Beam
